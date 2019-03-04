@@ -1,12 +1,18 @@
+## Script to return latest LTIP package download.
+## Requests Requests package
+
 import requests
 import json
 import sys
 
-
 # variables
 url = 'https://files.support.sandvine.com/'
+
 username = sys.argv[1]
 password = sys.argv[2]
+
+centos_version = 7
+
 headers = {
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
     'Accept-Encoding': 'gzip, deflate, br',
@@ -23,61 +29,72 @@ payload = {
     'password': password
 }
 
+
 def printAllOptions(request_string):
     return_object = request_string.json()
     for key,item in return_object.items():
         # Our key is only 1 item great
-        print('key is : {}'.format(key))
         # Item on the other hand is multiple objects in string so lets iterate:
         for i in range(0, len(item)):
             r_object = item[i]
-            print(str(i) + ' : ' + r_object['name'])
 
 
-# Work on grabbing token by authing
-response = requests.post(url='https://files.support.sandvine.com/accounts/login', headers=headers, data=json.dumps(payload), auth=(username,password))
-
-print("--------------------------")
-# ## This works: commenting Quick get request and print families
-family_request = requests.get(url='https://files.support.sandvine.com/software/families', headers=headers, auth=(username,password))
-print('Families Directories: ')
-print("--------------------------")
-# print using function
-printAllOptions(request_string=family_request)
-
-print("--------------------------")
-
-# Next tree : Protocols directories
-request_2 = requests.get(url='https://files.support.sandvine.com/software/family/Protocols/product/Protocols/streams', headers=headers, auth=(username,password))
-print('Stream Directories: ')
-# print using function
-#printAllOptions(request_string=request_2)
-
-print("--------------------------")
-
-return_object = request_2.json()
-
-def returnList():
+def return_last_outputs(request_string):
+    return_object = request_string.json()
     for key,item in return_object.items():
-        # for i in range(0, len(item)):
-        #     print(item[i]['name'])
-        # print(item)
-        # print(type(item))
-        return [x['name'] for x in item]
+        if(item):
+            # Item on the other hand is multiple objects in string so lets iterate:
+            return item[-1]['name'], item[-2]['name'], item[-3]['name']
 
-for x in returnList()[:-4:-1]:
-    r = requests.get(url='https://files.support.sandvine.com/software/family/Protocols/product/Protocols/stream/' + x + '/release/', headers=headers, auth=(username, password))
-    print(r.text)
+def return_last_output(request_string):
+    return_object = request_string.json()
+    for key,item in return_object.items():
+        if item:
+            # Item on the other hand is multiple objects in string so lets iterate:
+            print(item[-1]['name'])
+            return item[-1]['name']
 
 
+def last_protocol_pack_url(last_pack):
+    # release_dir,
+    for i in last_pack:
+        my_local_url = 'https://files.support.sandvine.com/software/family/Protocols/product/Protocols/stream/' \
+              + i + '/releases'
 
+        r = requests.get(
+            url=my_local_url,
+            headers=headers, auth=(username, password))
+        # ignore empty return object
+        if r.json():
+            last_output = return_last_output(r)
+            return i, last_output
 
+def get_auth_token():
+    # Work on grabbing token by authing
+    response = requests.post(url='https://files.support.sandvine.com/accounts/login', headers=headers,
+                             data=json.dumps(payload), auth=(username, password))
+    return response.json()['token']
 
-# Ok lets grab files from release
-# request_4 = requests.get(url='https://files.support.sandvine.com/software/family/Protocols/product/Protocols/stream/18.04/release/18.04.01', headers=headers, auth=(username,password))
-# print('Download Directories: ')
-# # cant use same print function
-# request_4_object = request_4.json()
-# request_4_object_documents = request_4_object['documents']
-# request_4_object_downloads = request_4_object['downloads']
-# request_4_object_release = request_4_object['release']
+def main():
+
+    # Staqe 1 : Auth token
+    my_token = get_auth_token()
+
+    # Stage 2: Last protocol packs
+    result = requests.get(url='https://files.support.sandvine.com/software/family/Protocols/product/Protocols/streams',
+                          headers=headers, auth=(username, password))
+
+    # printAllOptions(request_string=result)
+    last_protocol_packs = return_last_outputs(result)
+
+    version, release = last_protocol_pack_url(last_protocol_packs)
+
+    # Once we know the version we can print and return the URL to download the file
+    my_request = "https://files.support.sandvine.com/" \
+                 "software/Protocols/Protocols/" \
+                 "{}/{}/Protocols_{}.tar?token={}".format(version, release, release, my_token)
+    print("url to download latest LTIP (Please click on link to download: {}".format(my_request))
+    return my_request
+
+if __name__ == "__main__":
+    main()
